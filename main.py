@@ -58,18 +58,9 @@ def main():
         log.fatal(f"Vehicles file { vehicles_file } not found")
         sys.exit(1)
 
-    staff_file = config.STAFF_ROSTER
-    if not os.path.exists(vehicles_file):
-        log.fatal(f"Staff Roster file { staff_file } not found")
-        sys.exit(1)
-
     vehicles_wb = openpyxl.load_workbook(vehicles_file)
     vehicles_ws = vehicles_wb[config.VEHICLES_SHEET_NAME]
     vehicles_map = build_map(vehicles_ws, 1, "Rcvd From", rentals_filter)
-
-    staff_wb = openpyxl.load_workbook(staff_file)
-    staff_ws = staff_wb[config.STAFF_ROSTER_SHEET_NAME]
-    staff_map = build_map(staff_ws, 4, "Name", empty_filter)
 
     # delete workbook if it exists
     output_file = config.OUTPUT_WB
@@ -80,15 +71,27 @@ def main():
     # create a new one
     output_wb = openpyxl.Workbook()
 
-    # handle the merged sheet
-    merged_ws = output_wb.active
-    merged_ws.title = config.MERGED_SHEET_NAME
+    staff_file = config.STAFF_ROSTER
+    if not os.path.exists(staff_file):
+        log.info(f"skipping { config.MERGED_SHEET_NAME } sheet: could not find staff roster { staff_file }")
+    else:
 
-    make_merged(merged_ws, vehicles_map, staff_map)
+        log.debug(f"generating { config.MERGED_SHEET_NAME } sheet using { staff_file }")
+        staff_wb = openpyxl.load_workbook(staff_file)
+        staff_ws = staff_wb[config.STAFF_ROSTER_SHEET_NAME]
+        staff_map = build_map(staff_ws, 4, "Name", empty_filter)
+
+        # handle the merged sheet
+        merged_ws = output_wb.create_sheet(title=config.MERGED_SHEET_NAME)
+
+        make_merged(merged_ws, vehicles_map, staff_map)
 
     # handle reconciliation; ok if open_rentals_files isn't there; just don't make the sheet if it isn't
     rentals_file = config.OPEN_RENTALS
-    if os.path.exists(rentals_file):
+    if not os.path.exists(rentals_file):
+        log.info(f"skipping { config.RECONCILED_SHEET_NAME } sheet: could not find avis file { rentals_file }")
+    else:
+        log.debug(f"generating { config.RECONCILED_SHEET_NAME } sheet using { rentals_file }")
         rentals_wb = openpyxl.load_workbook(rentals_file)
         rentals_ws = rentals_wb[config.OPEN_RENTALS_SHEET_NAME]
 
@@ -96,6 +99,17 @@ def main():
 
         make_reconciled(reconciled_ws, rentals_ws, config.OPEN_RENTALS_TITLE_ROW, vehicles_ws, 1, config.OPEN_RENTALS_DRS)
 
+    # if neither sheet was created: give an error
+    if len(output_wb.sheetnames) == 1:
+        log.fatal(f"Neither the AVIS file ({ rentals_file }) nor the staff roster ({ staff_file }) were present.  Aborting...")
+        sys.exit(1)
+
+    # delete the initial default sheet
+    default_sheet_name = 'Sheet'
+    if default_sheet_name in output_wb:
+        del output_wb[default_sheet_name]
+
+    # save the file
     output_wb.save(output_file)
 
 
@@ -155,7 +169,6 @@ def make_merged(out_ws, vehicles_map, staff_map):
 
 def make_reconciled(reconciled_ws, rentals_ws, rentals_starting_row, vehicles_ws, vehicles_starting_row, dr_list):
     """ generate reconciled ws from rentals_ws, marking which key numbers and reservation numbers are in vehicles_ws """
-    log.debug("make_reconciled: called")
     
     rentals_name_map, rentals_cols = process_title_row(rentals_ws, rentals_starting_row)
     vehicles_name_map, vehicles_cols = process_title_row(vehicles_ws, vehicles_starting_row)

@@ -52,5 +52,5 @@ pipenv shell
 ./main.py [ --debug ]
 ```
 
-by default the program makes a 'merged.xslx' file in the current directory.  This is changable in config.py
+By default the program makes a 'merged.xslx' file in the current directory.  This is changable in config.py
 
