@@ -189,6 +189,8 @@ def make_reconciled(reconciled_ws, rentals_ws, rentals_starting_row, vehicles_ws
     key_column = rentals_name_map['MVA No']
     res_column = rentals_name_map['Reservation No']
     drs_column = rentals_name_map['Cost Control No']
+    match_map = { key_column: key_map, res_column: reservation_map, plate_column: plate_map }
+    match_fixups = { key_column: lambda x: re.sub('^0','',x), res_column: lambda x: re.sub('[-]','',x), plate_column: lambda x: x }
 
     log.debug("before output generation")
 
@@ -268,27 +270,45 @@ def make_reconciled(reconciled_ws, rentals_ws, rentals_starting_row, vehicles_ws
             value = cell.value
             out_cell = reconciled_ws.cell(row=output_row, column=output_column, value=value)
 
+            # ignore title row
+            if output_row == 1:
+                continue
+
+            # make date columns look like dates
             if cell_title in date_column_map:
                 out_cell.number_format = 'yyyy-mm-dd'
 
-            # now fix colors, but not for title row
-            if output_row != 1:
-                if input_column == res_column:
-                    match_map = reservation_map
-                elif input_column == key_column:
-                    match_map = key_map
-                    # trim leading zero from key when matching
-                    value = re.sub('^0', '', value)
-                elif input_column == plate_column:
-                    match_map = plate_map
-                else:
-                    match_map = None
+        # now fix colors, but not for title row
+        if output_row != 1:
 
-                if match_map != None:
-                    if value in match_map:
-                        out_cell.fill = fill_green
+            match_array = []
+            for col, cmap in match_map.items():
+                rental_value = row[col -1].value
+
+                # need to clean up data to cannonicalize it
+                rental_value = match_fixups[col](rental_value)
+                if rental_value in cmap:
+                    match_row = cmap[rental_value]
+                else:
+                    match_row = None
+                match_array.append(match_row)
+                #log.debug(f"match: row { output_row } col '{ col }' rental_value '{ rental_value }' match_row '{ match_row }'")
+
+            # if all the entries match: mark them green
+            if match_array.count(match_array[0]) == len(match_array):
+                # all match - mark them all green
+                for col in match_map.keys():
+                    # ZZZ: out_cell[col -1].fill = fill_green
+                    reconciled_ws.cell(row=output_row, column=col-1).fill = fill_green
+            else:
+                index = 0
+                for col, cmap in match_map.items():
+                    value = match_array[index]
+                    index += 1
+                    if value == None:
+                        reconciled_ws.cell(row=output_row, column=col-1).fill = fill_red
                     else:
-                        out_cell.fill = fill_red
+                        reconciled_ws.cell(row=output_row, column=col-1).fill = fill_yellow
 
         # DEBUG ONLY
         #if output_row > 10:
