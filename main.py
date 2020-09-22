@@ -31,6 +31,9 @@ class AttrDict(dict):
 def rentals_filter(row):
     return row['Ctg'] == 'R' and row['Key'] == ''
 
+def outprocessed_filter(row):
+    return row['Released'] != '' and row['Released'] != None
+
 def empty_filter(row):
     return True
 
@@ -92,7 +95,8 @@ def main():
         merged_ws = output_wb.create_sheet(title=config.MERGED_SHEET_NAME)
         merged_ws.freeze_panes = merged_ws['B2']
 
-        staff_spec = [ [ 'Email', 30 ], [ 'Cell phone', 14 ], [ 'Assigned', 20 ], [ 'Checked in', 20 ], [ 'Supervisor(s)', 20 ] ]
+        #staff_spec = [ [ 'Email', 30 ], [ 'Cell phone', 14 ], [ 'Assigned', 20 ], [ 'Checked in', 20 ], [ 'Supervisor(s)', 20 ] ]
+        staff_spec = [ [ 'Email', 30 ], [ 'Cell phone', 14 ], [ 'Assigned', 20 ], [ 'Checked in', 20 ], [ 'Current/Last Supervisor', 20 ] ]
 
         vehicles_spec.append([ 'Make', 10 ])
         vehicles_spec.append([ 'Model', 10 ])
@@ -119,8 +123,9 @@ def main():
 
         outroster_wb = openpyxl.load_workbook(outprocessed_file)
         outroster_ws = outroster_wb[config.OUTPROCESSED_ROSTER_SHEET_NAME]
-        outroster_map = build_map(outroster_ws, "Outprocessed Roster", config.OUTPROCESSED_ROSTER_TITLE_ROW, ["Name"], empty_filter)
-        outroster_spec = [ [ 'Email', 30 ], [ 'Cell phone', 14 ], [ 'Checked in', 20 ], [ 'Released', 20 ], [ 'Supervisor(s)', 20 ] ]
+        outroster_map = build_map(outroster_ws, "Outprocessed Roster", config.OUTPROCESSED_ROSTER_TITLE_ROW, ["Name"], outprocessed_filter)
+        #outroster_spec = [ [ 'Email', 30 ], [ 'Cell phone', 14 ], [ 'Checked in', 20 ], [ 'Released', 20 ], [ 'Supervisor(s)', 20 ] ]
+        outroster_spec = [ [ 'Email', 30 ], [ 'Cell phone', 14 ], [ 'Checked in', 20 ], [ 'Released', 20 ], [ 'Current/Last Supervisor', 20 ] ]
 
         out_ws = output_wb.create_sheet(title=config.OUTPROCESSED_SHEET_NAME)
         out_ws.freeze_panes = out_ws['B2']
@@ -381,6 +386,11 @@ def make_reconciled(reconciled_ws, rentals_ws, rentals_starting_row, vehicles_ws
 
         dr = row[drs_column -1].value
 
+
+        # convert ints to strings
+        if isinstance(dr, int):
+            dr = str(dr)
+
         # filter out unmatched DRs from list
         if output_row != 0 and dr not in dr_map:
             continue
@@ -421,7 +431,11 @@ def make_reconciled(reconciled_ws, rentals_ws, rentals_starting_row, vehicles_ws
                 # need to clean up data to cannonicalize it
                 if isinstance(rental_value, int):
                     rental_value = str(rental_value)
-                rental_value = match_fixups[col](rental_value)
+                try:
+                    rental_value = match_fixups[col](rental_value)
+                except:
+                    # ignore exceptions
+                    pass
                 if rental_value in cmap:
                     match_row = cmap[rental_value]
                 else:
@@ -451,6 +465,8 @@ def make_reconciled(reconciled_ws, rentals_ws, rentals_starting_row, vehicles_ws
         # DEBUG ONLY
         #if output_row > 10:
         #    break
+
+    log.debug(f"generated { output_row } rows of data in reconciled tab")
 
 
 
